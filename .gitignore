@@ -1,0 +1,6 @@
+__pycache__/
+.idea/
+processed_data
+error_info
+stone
+classification_model.pth.tar

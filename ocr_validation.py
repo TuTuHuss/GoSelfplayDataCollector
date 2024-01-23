@@ -4,19 +4,16 @@ import numpy as np
 import torch
 from matplotlib import pyplot as plt
 from paddleocr import PaddleOCR
-from torch import nn
 from PIL import Image
 import cv2
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from torchvision.models import mobilenet_v3_small
-import torchvision
+from img2txt import get_txt_pred
 
 import os
 import pandas as pd
 import random
-
-from img2sgf_v2 import get_white_ratio
 
 dataset = []
 
@@ -81,52 +78,7 @@ def get_prediction(ocr_info, cls_info, patches):
         x_cls = cls_info[i]
         x_pat = patches[i]
 
-        white_ratio = get_white_ratio(x_pat)
-        if white_ratio > 1 - white_ratio:
-            stone_base = 'o'
-        else:
-            stone_base = '#'
-
-        if x_cls == 'empty':
-            res[i] = f'.'
-
-        elif x_cls == 'char' and x_ocr is None:
-            res[i] = f'.'
-        elif x_cls == 'char' and x_ocr in 'ABCDE':
-            res[i] = f'.({x_ocr})'
-        elif x_cls == 'char' and x_ocr.isdigit():
-            res[i] = f'{stone_base}({x_ocr})'
-
-        elif x_cls == 'digit_w' and x_ocr is None:
-            res[i] = f'o'
-        elif x_cls == 'digit_w' and x_ocr.isdigit():
-            res[i] = f'o({x_ocr})'
-        elif x_cls == 'digit_w' and x_ocr in 'ABCDE':
-            res[i] = f'.({x_ocr})'
-
-        elif x_cls == 'digit_b' and x_ocr is None:
-            res[i] = f'#'
-        elif x_cls == 'digit_b' and x_ocr.isdigit():
-            res[i] = f'#({x_ocr})'
-        elif x_cls == 'digit_b' and x_ocr in 'ABCDE':
-            res[i] = f'.({x_ocr})'
-
-        elif x_cls == 'square':
-            res[i] = f'{stone_base}(□)'
-
-        elif x_cls == 'triangle':
-            res[i] = f'{stone_base}(△)'
-
-        elif x_cls == 'pure_stone':
-            res[i] = f'{stone_base}'
-        elif x_ocr == '+':
-            res[i] = f'.'
-        else:
-            plt.figure(figsize=(10, 10), dpi=80)
-            plt.imshow(x_pat)
-            plt.show()
-            # raise ValueError(f'Bad combination of x_cls: {x_cls} and x_ocr: {x_ocr}')
-            res[i] = '.'
+        res[i] = get_txt_pred(x_ocr, x_cls, x_pat)
     return res
 
 
@@ -220,13 +172,13 @@ class MyDataset(Dataset):
 
 
 if __name__ == '__main__':
-    preprocess_dataset([f'stone/img{i}' for i in range(1, 11)])
+    preprocess_dataset([f'stone/img{i}' for i in range(1, 12)])
 
     # Get cls info
     train_dataset = MyDataset(dataset)
     train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=False, num_workers=4)
 
-    model = mobilenet_v3_small(weight=torchvision.models.MobileNet_V3_Small_Weights, num_classes=7)
+    model = mobilenet_v3_small(num_classes=7)
     sd = torch.load('classification_model.pth.tar', map_location=torch.device('cpu'))
     model.load_state_dict(sd)
     model.eval()

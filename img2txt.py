@@ -1,4 +1,5 @@
 import copy
+import logging
 
 import cv2
 import numpy as np
@@ -6,6 +7,10 @@ import matplotlib.pyplot as plt
 from typing import List
 
 from paddleocr import PaddleOCR
+
+ocr = PaddleOCR(use_angle_cls=True, lang="ch")
+logging.disable(logging.DEBUG)
+logging.disable(logging.WARNING)
 
 
 def cut_img(img: np.ndarray, margin: int = 2):
@@ -159,17 +164,17 @@ def patchify(checkerboard: np.ndarray) -> List:
             if x_cent >= stone.shape[0] + 3 or y_cent >= stone.shape[1] + 3:
                 continue
             radius = int(best_board_width / 2) + 1
-            cv2.circle(stone, (y_cent, x_cent), radius, (0, 0, 255), 3)
+            # cv2.circle(stone, (y_cent, x_cent), radius, (0, 0, 255), 3)
 
             x_left, x_right = max(0, x_cent - radius), min(stone.shape[0], x_cent + radius)
             y_left, y_right = max(0, y_cent - radius), min(stone.shape[1], y_cent + radius)
             patches[-1].append(checkerboard[x_left: x_right, y_left: y_right, :])
 
-    for cir in circles:
-        cv2.circle(stone, (int(cir[0]), int(cir[1])), int(cir[2]), (0, 255, 0), 3)
-    plt.figure(figsize=(10, 10), dpi=80)
-    plt.imshow(stone)
-    plt.show()
+    # for cir in circles:
+    #     cv2.circle(stone, (int(cir[0]), int(cir[1])), int(cir[2]), (0, 255, 0), 3)
+    # plt.figure(figsize=(10, 10), dpi=80)
+    # plt.imshow(stone)
+    # plt.show()
 
     return patches
 
@@ -191,20 +196,8 @@ def batch_ocr(patches):
             before_y = (PADDED_IMG_SIZE - pat.shape[0]) // 2
 
             margin_ratio = 0.10
-            # pat = cv2.GaussianBlur(pat, (3, 3), 1)
-            # pat_x = cv2.Sobel(pat, -1, 1, 0)
-            # pat_y = cv2.Sobel(pat, -1, 0, 1)
-            # scale_x = cv2.convertScaleAbs(pat_x)
-            # scale_y = cv2.convertScaleAbs(pat_y)
-            # pat = cv2.addWeighted(scale_x, 0.5, scale_y, 0.5, 0)
-
             pat = pat[int(pat.shape[0] * margin_ratio): int(pat.shape[0] * (1 - margin_ratio)),
                   int(pat.shape[1] * margin_ratio): int(pat.shape[1] * (1 - margin_ratio)), :]
-
-            # pat = cv2.morphologyEx(pat, cv2.MORPH_CLOSE, np.ones((3, 3)))
-
-            # if np.mean(pat) > 115:
-            #     pat = 255 - pat
 
             padded_img = np.pad(pat,
                                 ((before_x, PADDED_IMG_SIZE - before_x - pat.shape[0]),
@@ -216,27 +209,27 @@ def batch_ocr(patches):
                 ret[-1].append(None)
             else:
                 ret[-1].append(res[0][1][0])
-            # plt.figure(figsize=(10, 10), dpi=80)
-            # cv2.putText(img=padded_img, text=str(ret[-1][-1]), org=(50, 50), fontFace=cv2.FONT_HERSHEY_TRIPLEX,
-            #             fontScale=0.5,
-            #             color=(0, 255, 0), thickness=1)
-            # plt.imshow(padded_img)
-            # plt.show()
     return ret
+
+
+def _post_process(s):
+    dict1 = {'①': "1", '②': "2", '③': "3", '④': "4", '⑤': "5"}
+    s = s.upper()
+    func1 = lambda c: c if c not in dict1 else dict1[c]
+    func = lambda c: c in "0123456789ABCDEFG△□"
+    s = ''.join(map(func1, s))
+    s = ''.join(filter(func, s))
+    if len(s) == 0:
+        s = None
+    return s
 
 
 def post_process(raw_ocr):
     for j in range(len(raw_ocr)):
         for i in range(len(raw_ocr[j])):
             if isinstance(raw_ocr[j][i], str):
-                dict1 = {'①': "1", '②': "2", '③': "3", '④': "4", '⑤': "5"}
-                raw_ocr[j][i] = raw_ocr[j][i].upper()
-                func1 = lambda c: c if c not in dict1 else dict1[c]
-                func = lambda c: c in "0123456789ABCDEFG△□"
-                raw_ocr[j][i] = ''.join(map(func1, raw_ocr[j][i]))
-                raw_ocr[j][i] = ''.join(filter(func, raw_ocr[j][i]))
-                if len(raw_ocr[j][i]) == 0:
-                    raw_ocr[j][i] = None
+                raw_ocr[j][i] = _post_process(raw_ocr[j][i])
+
 
 
 def batch_classification(patches):
@@ -290,6 +283,79 @@ def get_white_ratio(pat):
     return np.sum(pat) / np.sum(255 * np.ones_like(pat))
 
 
+def get_txt_pred(x_ocr, x_cls, x_pat):
+    if x_ocr == '△':
+        x_cls = 'triangle'
+    elif x_ocr == '□':
+        x_cls = 'square'
+
+    if x_cls == 'digit_w' or x_cls == 'digit_b':
+        inversed_pat = 255 - x_pat
+        PADDED_IMG_SIZE = 64
+        before_x = (PADDED_IMG_SIZE - inversed_pat.shape[0]) // 2
+        before_y = (PADDED_IMG_SIZE - inversed_pat.shape[0]) // 2
+
+        margin_ratio = 0.10
+        inversed_pat = inversed_pat[int(inversed_pat.shape[0] * margin_ratio): int(inversed_pat.shape[0] * (1 - margin_ratio)),
+              int(inversed_pat.shape[1] * margin_ratio): int(inversed_pat.shape[1] * (1 - margin_ratio)), :]
+
+        padded_img = np.pad(inversed_pat,
+                            ((before_x, PADDED_IMG_SIZE - before_x - inversed_pat.shape[0]),
+                             (before_y, PADDED_IMG_SIZE - before_y - inversed_pat.shape[1]),
+                             (0, 0)))
+
+        res = ocr.ocr(img=padded_img, det=True)[0]
+        if res is not None:
+            if x_ocr is None:
+                x_ocr = _post_process(res[0][1][0])
+
+    white_ratio = get_white_ratio(x_pat)
+    if white_ratio > 1 - white_ratio:
+        stone_base = 'o'
+    else:
+        stone_base = '#'
+
+    if x_cls == 'empty':
+        ret = f'.'
+
+    elif x_cls == 'char' and x_ocr is None:
+        ret = f'.'
+    elif x_cls == 'char' and x_ocr in 'ABCDE':
+        ret = f'.({x_ocr})'
+    elif x_cls == 'char' and x_ocr.isdigit():
+        ret = f'{stone_base}({x_ocr})'
+
+    elif x_cls == 'digit_w' and x_ocr is None:
+        ret = f'o'
+    elif x_cls == 'digit_w' and x_ocr.isdigit():
+        ret = f'o({x_ocr})'
+    elif x_cls == 'digit_w' and x_ocr in 'ABCDE':
+        ret = f'.({x_ocr})'
+    elif x_cls == 'digit_w':
+        ret = f'o'
+
+    elif x_cls == 'digit_b' and x_ocr is None:
+        ret = f'#'
+    elif x_cls == 'digit_b' and x_ocr.isdigit():
+        ret = f'#({x_ocr})'
+    elif x_cls == 'digit_b' and x_ocr in 'ABCDE':
+        ret = f'.({x_ocr})'
+    elif x_cls == 'digit_b':
+        ret = f'#'
+
+    elif x_cls == 'square':
+        ret = f'{stone_base}(□)'
+
+    elif x_cls == 'triangle':
+        ret = f'{stone_base}(△)'
+
+    elif x_cls == 'pure_stone':
+        ret = f'{stone_base}'
+    else:
+        raise ValueError(f'Bad combination of x_cls: {x_cls} and x_ocr: {x_ocr}')
+    return ret
+
+
 def get_prediction(ocr_info, cls_info, patches):
     res = copy.deepcopy(ocr_info)
     for i in range(len(ocr_info)):
@@ -298,65 +364,26 @@ def get_prediction(ocr_info, cls_info, patches):
             x_ocr = ocr_info[i][j]
             x_cls = cls_info[i][j]
             x_pat = patches[i][j]
-
-            white_ratio = get_white_ratio(x_pat)
-            if white_ratio > 1 - white_ratio:
-                stone_base = 'o'
-            else:
-                stone_base = '#'
-
-            if x_cls == 'empty':
-                res[i][j] = f'.'
-
-            elif x_cls == 'char' and x_ocr is None:
-                res[i][j] = f'.'
-            elif x_cls == 'char' and x_ocr in 'ABCDE':
-                res[i][j] = f'.({x_ocr})'
-            elif x_cls == 'char' and x_ocr.isdigit():
-                res[i][j] = f'{stone_base}({x_ocr})'
-
-            elif x_cls == 'digit_w' and x_ocr is None:
-                res[i][j] = f'o'
-            elif x_cls == 'digit_w' and x_ocr.isdigit():
-                res[i][j] = f'o({x_ocr})'
-            elif x_cls == 'digit_w' and x_ocr in 'ABCDE':
-                res[i][j] = f'.({x_ocr})'
-
-            elif x_cls == 'digit_b' and x_ocr is None:
-                res[i][j] = f'#'
-            elif x_cls == 'digit_b' and x_ocr.isdigit():
-                res[i][j] = f'#({x_ocr})'
-            elif x_cls == 'digit_b' and x_ocr in 'ABCDE':
-                res[i][j] = f'.({x_ocr})'
-
-            elif x_cls == 'square':
-                res[i][j] = f'{stone_base}(□)'
-
-            elif x_cls == 'triangle':
-                res[i][j] = f'{stone_base}(△)'
-
-            elif x_cls == 'pure_stone':
-                res[i][j] = f'{stone_base}'
-            else:
-                raise ValueError(f'Bad combination of x_cls: {x_cls} and x_ocr: {x_ocr}')
+            res[i][j] = get_txt_pred(x_ocr, x_cls, x_pat)
     return res
 
 
-if __name__ == '__main__':
-    image = load_img("./data/1_board.png")
+def board2txt(path):
+    image = load_img(path)
     segmented_patches = patchify(image)
 
-    print(f'Total number of patches: {sum([len(ll) for ll in segmented_patches])}')
-
     # OCR
-    ocr = PaddleOCR(use_angle_cls=True, lang="ch")
     ocr_res = batch_ocr(segmented_patches)
     post_process(ocr_res)
 
     # Classification
     cls_res = batch_classification(segmented_patches)
-
     final_res = get_prediction(ocr_res, cls_res, segmented_patches)
 
-    for l in final_res:
-        print(l)
+    txt = [' '.join(final_res[i]) for i in range(len(final_res))]
+    return '\n'.join(txt)
+
+
+if __name__ == '__main__':
+    ocr_txt = board2txt("./data/1_board.png")
+    print(ocr_txt)

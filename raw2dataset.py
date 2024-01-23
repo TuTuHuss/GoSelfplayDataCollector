@@ -78,13 +78,13 @@ def generate_dataset(val_frac=0.2):
         label_path = f'test/word_{idx}.png'
         test_str += f"{label_path} {content}\n"
 
-    with open('train_data/train_list.txt', 'w') as f:
+    with open('train_data/train_list.txt', 'w', encoding='utf-8') as f:
         f.write(train_str)
-    with open('train_data/val_list.txt', 'w') as f:
+    with open('train_data/val_list.txt', 'w', encoding='utf-8') as f:
         f.write(test_str)
 
 
 if __name__ == '__main__':
-    preprocess_dataset([f'stone/img{i}' for i in range(1, 11)])
+    preprocess_dataset([f'stone/img{i}' for i in range(1, 12)])
     generate_dataset(val_frac=0.2)
     print(len(dataset))

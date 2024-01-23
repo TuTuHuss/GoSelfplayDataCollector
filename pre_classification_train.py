@@ -97,13 +97,20 @@ if __name__ == '__main__':
     val_frac = 0.2
     val_num = int(len(dataset) * val_frac)
 
-    train_dataset = MyDataset(dataset[:-val_num])
+    # train_dataset = MyDataset(dataset[:-val_num])
+    train_dataset = MyDataset(dataset)
     val_dataset = MyDataset(dataset[-val_num:])
 
-    train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True, num_workers=4)
-    val_dataloader = DataLoader(val_dataset, batch_size=64, shuffle=True, num_workers=4)
+    train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True, num_workers=0)
+    val_dataloader = DataLoader(val_dataset, batch_size=64, shuffle=True, num_workers=0)
 
-    model = mobilenet_v3_small(weight=torchvision.models.MobileNet_V3_Small_Weights, num_classes=7).cuda()
+    model_pretrained = dict(mobilenet_v3_small(pretrained=True).state_dict())
+    model_pretrained.pop('classifier.3.weight')
+    model_pretrained.pop('classifier.3.bias')
+    model = mobilenet_v3_small(num_classes=7)
+    model.load_state_dict(model_pretrained, strict=False)
+    model = model.cuda()
+
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 

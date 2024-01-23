@@ -1,0 +1,19 @@
+拉框标注棋谱数据：
+- 运行 main.py
+- screenshot_selector.py: 提供拉框的标注工具
+
+训练多模态模型：
+- convert.py: 生成符合要求的数据集格式
+- llama_train_mm.py: 训练模型
+
+OCR 工具训练：
+- 将收集好的数据放在 ./stone 文件夹下
+- 运行 raw2dataset.py 生成合理的数据集格式
+- pre_classification_train.py: 训练 OCR 的第一步分类神经网络
+- ocr_validation: 测试 OCR 的训练效果
+- img2txt.py: 处理图像的工具函数，main 函数中包括一个 demo
+
+训练纯语言模型：
+- generate_lm_dataset.py: 生成纯语言模型的数据集
+- inspect_lm_data.py: 查看生成数据集的具体内容
+- llama_train_lm.py: 训练模型

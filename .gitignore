@@ -7,3 +7,4 @@ classification_model.pth.tar
 train_data
 classification_model_v1.pth.tar
 dataset_v1.pkl
+.DS_store
